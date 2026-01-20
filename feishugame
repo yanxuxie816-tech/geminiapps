@@ -1,0 +1,460 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { Trophy, Lock, Flag, MapPin, CheckCircle, XCircle, Clock, ChevronRight, Star } from 'lucide-react';
+
+const GameData = [
+  {
+    id: 1,
+    city: "一马当先",
+    type: "single",
+    question: "我可以将自己置顶，方便收集和传输各类信息、文档正确。",
+    options: [
+      { id: "A", text: "正确" },
+      { id: "B", text: "错误" }
+    ],
+    correctAnswer: ["A"],
+    explanation: "A正确"
+  },
+  {
+    id: 2,
+    city: "鲜衣怒马",
+    type: "single",
+    question: "设置云文档权限时，添加其他同事为协作者，都一定会发送通知，无法设置成不通知。",
+    options: [
+      { id: "A", text: "正确" },
+      { id: "B", text: "错误" }
+    ],
+    correctAnswer: ["B"],
+    explanation: "B错误 (可以在分享时选择不发送通知)"
+  },
+  {
+    id: 3,
+    city: "快马加鞭",
+    type: "single",
+    question: "飞书文档和飞书表格中插入的多维表格也可以设置高级权限错误。",
+    options: [
+      { id: "A", text: "正确" },
+      { id: "B", text: "错误" }
+    ],
+    correctAnswer: ["B"],
+    explanation: "B错误 (实际上是可以设置高级权限的)"
+  },
+  {
+    id: 4,
+    city: "马不停蹄",
+    type: "multiple",
+    question: "作为会议的主持人，我应该做到以下哪些？",
+    options: [
+      { id: "A", text: "会议时间安排紧凑时，通过会议倒计时控制发言时间" },
+      { id: "B", text: "及时开始妙记记录，会间休息时关闭妙记记录" },
+      { id: "C", text: "当我需要操作共享屏幕和共享文档时，通过修改个人状态关闭飞书消息提醒" },
+      { id: "D", text: "当发现有同事忘记关麦时，通过全员静音按钮维持会议秩序" }
+    ],
+    correctAnswer: ["A", "B", "C", "D"],
+    explanation: "ABCD都是会议主持人的优秀实践。"
+  },
+  {
+    id: 5,
+    city: "马到成功",
+    type: "multiple",
+    question: "通过多维表格的自动化功能，可实现的的场景有？",
+    options: [
+      { id: "A", text: "在任务截止前 1 天，自动提醒未完成任务的负责人" },
+      { id: "B", text: "新增一条任务时，系统自动将任务状态标为未开始" },
+      { id: "C", text: "每周一早上 10 点提醒所有团队成员更新周报" },
+      { id: "D", text: "需求状态变更为待验收时，自动通知验收负责人" }
+    ],
+    correctAnswer: ["A", "B", "C", "D"],
+    explanation: "多维表格自动化非常强大，以上场景均可实现。"
+  }
+];
+
+// --- Sub Components ---
+
+const Confetti = () => {
+  // Simple CSS implementation for confetti particles
+  return (
+    <div className="fixed inset-0 pointer-events-none overflow-hidden z-50 flex justify-center">
+      {[...Array(20)].map((_, i) => (
+        <div
+          key={i}
+          className="absolute animate-fall opacity-0"
+          style={{
+            left: `${Math.random() * 100}%`,
+            top: `-5%`,
+            animationDelay: `${Math.random() * 2}s`,
+            animationDuration: `${2 + Math.random() * 3}s`,
+            backgroundColor: ['#ff5722', '#ffc107', '#4caf50', '#2196f3'][Math.floor(Math.random() * 4)],
+            width: '10px',
+            height: '10px',
+            borderRadius: '50%'
+          }}
+        />
+      ))}
+    </div>
+  );
+};
+
+export default function App() {
+  const [currentScreen, setCurrentScreen] = useState('welcome'); // welcome, map, quiz, result
+  const [unlockedLevel, setUnlockedLevel] = useState(0); // 0 to 5
+  const [activeLevelId, setActiveLevelId] = useState(null);
+  
+  // Quiz State
+  const [selectedOptions, setSelectedOptions] = useState([]);
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [isCorrect, setIsCorrect] = useState(false);
+
+  // Timer State
+  const [startTime, setStartTime] = useState(null);
+  const [endTime, setEndTime] = useState(null);
+
+  // --- Logic ---
+
+  const startGame = () => {
+    setStartTime(Date.now());
+    setCurrentScreen('map');
+  };
+
+  const enterLevel = (levelIndex) => {
+    // Only allow entering unlocked levels or the next immediate level
+    if (levelIndex > unlockedLevel) return;
+    
+    // Don't re-enter completed levels for quiz (optional: could allow review)
+    if (levelIndex < unlockedLevel) {
+       // Just showing a toast or ignoring for this game logic to keep flow forward
+       return; 
+    }
+
+    setActiveLevelId(levelIndex);
+    setSelectedOptions([]);
+    setShowFeedback(false);
+    setCurrentScreen('quiz');
+  };
+
+  const handleOptionSelect = (optionId, type) => {
+    if (showFeedback) return; // Prevent changing after submit
+
+    if (type === 'single') {
+      setSelectedOptions([optionId]);
+    } else {
+      if (selectedOptions.includes(optionId)) {
+        setSelectedOptions(selectedOptions.filter(id => id !== optionId));
+      } else {
+        setSelectedOptions([...selectedOptions, optionId]);
+      }
+    }
+  };
+
+  const submitAnswer = () => {
+    const currentQuestion = GameData[activeLevelId];
+    
+    // Sort both arrays to ensure order doesn't matter
+    const userAns = [...selectedOptions].sort();
+    const correctAns = [...currentQuestion.correctAnswer].sort();
+    
+    const correct = JSON.stringify(userAns) === JSON.stringify(correctAns);
+    
+    setIsCorrect(correct);
+    setShowFeedback(true);
+  };
+
+  const handleNext = () => {
+    if (isCorrect) {
+      // If it was the last level
+      if (activeLevelId === GameData.length - 1) {
+        setEndTime(Date.now());
+        setUnlockedLevel(prev => prev + 1);
+        setCurrentScreen('result');
+      } else {
+        setUnlockedLevel(prev => Math.max(prev, activeLevelId + 1));
+        setCurrentScreen('map');
+      }
+    } else {
+      // If wrong, reset and try again immediately or go back to map?
+      // Requirement: "Remind to jump back to map to start next level" implies only on success.
+      // But typically on failure you retry. Let's allow retry or back to map.
+      // For this flow, let's keep them on the quiz screen to Retry.
+      setShowFeedback(false);
+      setSelectedOptions([]);
+    }
+  };
+
+  const backToMapAfterSuccess = () => {
+     if (activeLevelId === GameData.length - 1) {
+        setEndTime(Date.now());
+        setUnlockedLevel(prev => prev + 1);
+        setCurrentScreen('result');
+     } else {
+        setUnlockedLevel(prev => Math.max(prev, activeLevelId + 1));
+        setCurrentScreen('map');
+     }
+  };
+
+  const getDuration = () => {
+    if (!startTime || !endTime) return "0秒";
+    const diff = Math.floor((endTime - startTime) / 1000);
+    const m = Math.floor(diff / 60);
+    const s = diff % 60;
+    return m > 0 ? `${m}分${s}秒` : `${s}秒`;
+  };
+
+  // --- Renderers ---
+
+  const renderWelcome = () => (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-red-600 to-red-800 p-6 text-white text-center">
+      <div className="w-24 h-24 bg-yellow-400 rounded-full flex items-center justify-center mb-6 shadow-lg animate-bounce">
+         <Trophy size={48} className="text-red-700" />
+      </div>
+      <h1 className="text-4xl font-bold mb-4 tracking-wider">飞书闯关</h1>
+      <h2 className="text-2xl font-light mb-8 opacity-90">一马当先 · 效率倍增</h2>
+      <p className="mb-8 text-sm opacity-80">完成5个城市挑战，赢取新年封号！</p>
+      
+      <button 
+        onClick={startGame}
+        className="px-8 py-4 bg-yellow-400 text-red-800 font-bold rounded-full text-xl shadow-lg transform transition active:scale-95 hover:bg-yellow-300 w-full max-w-xs"
+      >
+        开始挑战
+      </button>
+    </div>
+  );
+
+  const renderMap = () => (
+    <div className="min-h-screen bg-red-50 pb-10">
+      <div className="bg-red-600 p-6 text-white shadow-md rounded-b-3xl mb-8 relative">
+         <h2 className="text-2xl font-bold text-center">闯关地图</h2>
+         <p className="text-center text-xs opacity-80 mt-1">点击点亮的城市开始答题</p>
+      </div>
+
+      <div className="max-w-md mx-auto px-6 relative">
+        {/* Connecting Line */}
+        <div className="absolute left-1/2 top-4 bottom-20 w-1 bg-gray-300 transform -translate-x-1/2 z-0 rounded-full">
+           <div 
+             className="w-full bg-yellow-500 transition-all duration-1000"
+             style={{ height: `${(unlockedLevel / 5) * 100}%` }}
+           ></div>
+        </div>
+
+        <div className="flex flex-col gap-8 relative z-10">
+          {GameData.map((level, index) => {
+            const isLocked = index > unlockedLevel;
+            const isCompleted = index < unlockedLevel;
+            const isCurrent = index === unlockedLevel;
+
+            return (
+              <div 
+                key={level.id} 
+                onClick={() => enterLevel(index)}
+                className={`
+                  relative flex items-center p-4 rounded-xl shadow-sm border-2 transition-all duration-300
+                  ${isLocked ? 'bg-gray-100 border-gray-200 cursor-not-allowed grayscale opacity-70' : 
+                    isCompleted ? 'bg-green-50 border-green-200 cursor-default' : 
+                    'bg-white border-yellow-400 cursor-pointer transform hover:-translate-y-1 shadow-md ring-4 ring-yellow-100'}
+                `}
+              >
+                {/* Icon Box */}
+                <div className={`
+                  w-12 h-12 rounded-full flex items-center justify-center mr-4 shrink-0
+                  ${isLocked ? 'bg-gray-200' : isCompleted ? 'bg-green-100 text-green-600' : 'bg-yellow-100 text-yellow-600'}
+                `}>
+                  {isLocked && <Lock size={20} />}
+                  {isCompleted && <Flag size={20} fill="currentColor" />}
+                  {isCurrent && <MapPin size={24} className="animate-pulse" fill="currentColor" />}
+                </div>
+
+                {/* Text */}
+                <div className="flex-1">
+                  <h3 className={`font-bold ${isLocked ? 'text-gray-400' : 'text-gray-800'}`}>
+                    第{index + 1}关：{level.city}
+                  </h3>
+                  <div className="text-xs text-gray-500 mt-1 flex items-center">
+                    {isCompleted ? <span className="text-green-600 font-medium">已插旗占领</span> : 
+                     isLocked ? <span>待解锁</span> : 
+                     <span className="text-yellow-600 font-bold">点击挑战!</span>}
+                  </div>
+                </div>
+
+                {/* Status Indicator */}
+                {isCurrent && (
+                   <div className="absolute -right-1 -top-1">
+                      <span className="relative flex h-4 w-4">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-4 w-4 bg-yellow-500"></span>
+                      </span>
+                   </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderQuiz = () => {
+    const question = GameData[activeLevelId];
+
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col">
+        {/* Header */}
+        <div className="bg-white p-4 shadow-sm flex items-center justify-between">
+          <button onClick={() => setCurrentScreen('map')} className="text-gray-500 text-sm">
+             ← 返回地图
+          </button>
+          <div className="font-bold text-gray-800">
+             {activeLevelId + 1}/{GameData.length} {question.city}
+          </div>
+          <div className="w-10"></div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 p-6 max-w-md mx-auto w-full">
+          <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+             <div className="mb-4">
+               <span className={`text-xs font-bold px-2 py-1 rounded ${question.type === 'single' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'}`}>
+                 {question.type === 'single' ? '单选题' : '多选题'}
+               </span>
+             </div>
+             <h2 className="text-lg font-bold text-gray-800 leading-relaxed">
+               {question.question}
+             </h2>
+          </div>
+
+          <div className="space-y-3 mb-24">
+            {question.options.map(opt => {
+              const isSelected = selectedOptions.includes(opt.id);
+              return (
+                <button
+                  key={opt.id}
+                  onClick={() => handleOptionSelect(opt.id, question.type)}
+                  disabled={showFeedback}
+                  className={`
+                    w-full text-left p-4 rounded-xl border-2 transition-all flex items-start
+                    ${isSelected 
+                      ? 'border-blue-500 bg-blue-50 text-blue-800 shadow-md' 
+                      : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'}
+                    ${showFeedback ? 'opacity-90 cursor-default' : ''}
+                  `}
+                >
+                  <div className={`
+                    w-6 h-6 rounded-full border-2 flex items-center justify-center mr-3 mt-0.5 shrink-0
+                    ${isSelected ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-300'}
+                  `}>
+                    {isSelected && <div className="w-2 h-2 bg-white rounded-full"></div>}
+                  </div>
+                  <span><span className="font-bold mr-1">{opt.id}.</span> {opt.text}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Footer Action */}
+        <div className="fixed bottom-0 left-0 right-0 bg-white p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+           <div className="max-w-md mx-auto">
+             {!showFeedback ? (
+               <button 
+                 onClick={submitAnswer}
+                 disabled={selectedOptions.length === 0}
+                 className={`w-full py-4 rounded-xl font-bold text-lg text-center transition-colors
+                   ${selectedOptions.length === 0 ? 'bg-gray-300 text-gray-500' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg'}
+                 `}
+               >
+                 提交答案
+               </button>
+             ) : (
+                // Feedback Modal Inline
+                <div className={`rounded-xl p-4 ${isCorrect ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+                   <div className="flex items-center mb-2">
+                     {isCorrect ? <CheckCircle className="text-green-600 mr-2" /> : <XCircle className="text-red-600 mr-2" />}
+                     <span className={`font-bold text-lg ${isCorrect ? 'text-green-700' : 'text-red-700'}`}>
+                       {isCorrect ? `回答正确！${question.explanation.split(' ')[0]}` : "回答错误"}
+                     </span>
+                   </div>
+                   <p className="text-sm text-gray-600 mb-4 pl-8">
+                      {isCorrect ? "恭喜你，插旗成功！" : `正确答案是：${question.correctAnswer.join('')}。${question.explanation}`}
+                   </p>
+                   
+                   {isCorrect ? (
+                     <button onClick={backToMapAfterSuccess} className="w-full py-3 bg-green-600 text-white rounded-lg font-bold shadow-md hover:bg-green-700">
+                       {activeLevelId === 4 ? "领取奖励" : "下一关 →"}
+                     </button>
+                   ) : (
+                     <button onClick={() => { setShowFeedback(false); setSelectedOptions([]); }} className="w-full py-3 bg-white border border-red-200 text-red-600 rounded-lg font-bold hover:bg-red-50">
+                       再试一次
+                     </button>
+                   )}
+                </div>
+             )}
+           </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderResult = () => (
+    <div className="min-h-screen bg-gradient-to-br from-yellow-500 to-red-600 flex flex-col items-center justify-center p-6 text-center relative overflow-hidden">
+      <Confetti />
+      
+      <div className="bg-white/90 backdrop-blur-sm p-8 rounded-3xl shadow-2xl max-w-xs w-full relative z-10 animate-fade-in-up">
+        <div className="absolute -top-12 left-1/2 transform -translate-x-1/2">
+           <div className="w-24 h-24 bg-yellow-300 rounded-full border-4 border-white flex items-center justify-center shadow-lg">
+              <Star size={48} className="text-red-600 fill-current" />
+           </div>
+        </div>
+        
+        <div className="mt-12">
+          <h2 className="text-gray-500 text-sm uppercase tracking-widest font-bold mb-2">通关证书</h2>
+          <h1 className="text-3xl font-extrabold text-red-600 leading-tight mb-4">
+            祝贺你<br/>新年一马平川
+          </h1>
+          
+          <div className="bg-red-50 rounded-xl p-4 mb-6">
+            <div className="flex items-center justify-center text-gray-600 mb-1">
+              <Clock size={16} className="mr-2" />
+              <span className="text-sm">通关耗时</span>
+            </div>
+            <div className="text-2xl font-mono font-bold text-gray-800">
+              {getDuration()}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+             <button onClick={() => window.location.reload()} className="w-full py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 shadow-lg">
+                再玩一次
+             </button>
+             <div className="text-xs text-gray-400 mt-4">
+                截图分享你的新年好运
+             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="font-sans text-gray-900">
+      <style>{`
+        @keyframes fall {
+          0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+          100% { transform: translateY(100vh) rotate(360deg); opacity: 0; }
+        }
+        .animate-fall {
+          animation-name: fall;
+          animation-timing-function: linear;
+        }
+        .animate-fade-in-up {
+          animation: fadeInUp 0.8s ease-out;
+        }
+        @keyframes fadeInUp {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+      
+      {currentScreen === 'welcome' && renderWelcome()}
+      {currentScreen === 'map' && renderMap()}
+      {currentScreen === 'quiz' && renderQuiz()}
+      {currentScreen === 'result' && renderResult()}
+    </div>
+  );
+}
